@@ -18,12 +18,41 @@ import { getCurrentUser } from '@/lib/auth';
 //     `screenshot_url` VARCHAR(500) COMMENT '项目截图地址',
 //     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
 //     `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+//     PRIMARY KEY (`id`),
+//     FULLTEXT INDEX `idx_search` (`project_name`, `project_description`, `keywords`)
+// ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+// 获取所有分类的API
+export async function OPTIONS(request: NextRequest) {
+    try {
+        // 获取所有不同的分类
+        const [categories] = await pool.query(
+            'SELECT DISTINCT category FROM fav_favorites WHERE category IS NOT NULL AND category != "" ORDER BY category'
+        );
+        
+        return Response.json({
+            success: true,
+            message: '获取分类成功',
+            data: {
+                categories: (categories as any[]).map(row => row.category)
+            }
+        });
+    } catch (error) {
+        return Response.json({
+            success: false,
+            message: '获取分类失败',
+            error: error instanceof Error ? error.message : '未知错误'
+        }, { status: 500 });
+    }
+}
 
 export async function GET(request: NextRequest) {
     try {
         const { searchParams } = new URL(request.url);
         const page = parseInt(searchParams.get('page') || '1', 10);
         const pageSize = parseInt(searchParams.get('pageSize') || '10', 10);
+        const search = searchParams.get('search') || '';
+        const category = searchParams.get('category') || '';
         
         // 参数校验
         if (page < 1 || pageSize < 1 || pageSize > 100) {
@@ -36,15 +65,40 @@ export async function GET(request: NextRequest) {
         // 计算偏移量
         const offset = (page - 1) * pageSize;
 
+        // 构建查询条件
+        let whereConditions = [];
+        let queryParams = [];
+        
+        // 搜索条件：支持项目名称、关键词、项目介绍的模糊搜索
+        if (search.trim()) {
+            const searchTerm = `%${search.trim()}%`;
+            whereConditions.push(
+                '(project_name LIKE ? OR keywords LIKE ? OR project_description LIKE ?)'
+            );
+            queryParams.push(searchTerm, searchTerm, searchTerm);
+        }
+        
+        // 分类筛选
+        if (category.trim()) {
+            whereConditions.push('category = ?');
+            queryParams.push(category.trim());
+        }
+        
+        // 构建WHERE子句
+        const whereClause = whereConditions.length > 0 
+            ? `WHERE ${whereConditions.join(' AND ')}` 
+            : '';
+        
         // 查询数据
         const [rows] = await pool.query(
-            'SELECT * FROM fav_favorites ORDER BY created_at DESC LIMIT ? OFFSET ?',
-            [pageSize, offset]
+            `SELECT * FROM fav_favorites ${whereClause} ORDER BY created_at DESC LIMIT ? OFFSET ?`,
+            [...queryParams, pageSize, offset]
         );
 
         // 查询总数
         const [countResult] = await pool.query(
-            'SELECT COUNT(*) as total FROM fav_favorites'
+            `SELECT COUNT(*) as total FROM fav_favorites ${whereClause}`,
+            queryParams
         );
         const total = (countResult as any)[0].total;
         const totalPages = Math.ceil(total / pageSize);
@@ -59,6 +113,10 @@ export async function GET(request: NextRequest) {
                     pageSize,
                     total,
                     totalPages
+                },
+                search: {
+                    keyword: search,
+                    category: category
                 }
             }
         });
@@ -103,16 +161,24 @@ export async function POST(request: NextRequest) {
             }, { status: 400 })
         }
 
+        // 构建搜索索引字段（将项目名称、介绍、关键词合并用于搜索）
+        const searchTokens = [
+            project_name,
+            project_description || '',
+            keywords || ''
+        ].filter(Boolean).join(' ');
+
         const [result] = await pool.query(
             `INSERT INTO fav_favorites 
-            (project_name, project_url, project_description, keywords, category, rating, is_public, tags, favicon_url, screenshot_url) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            (project_name, project_url, project_description, keywords, search_tokens, category, rating, is_public, tags, favicon_url, screenshot_url) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
                 project_name,
                 project_url,
                 project_description || '',
                 keywords || '',
-                category || '',
+                searchTokens,
+                category || '其他',
                 rating || 0,
                 is_public || 0,
                 tags || '',
