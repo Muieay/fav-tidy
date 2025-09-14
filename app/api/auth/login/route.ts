@@ -1,18 +1,6 @@
 import { cookies } from 'next/headers';
 import { authenticateUser } from '@/lib/auth';
-import mysql from 'mysql2/promise'
-
-// 创建 MySQL 连接池（推荐）
-export const pool = mysql.createPool({
-  host: process.env.MYSQL_HOST,
-  user: process.env.MYSQL_USER,
-  port: Number(process.env.MYSQL_PORT) || 3306,
-  password: process.env.MYSQL_PASSWORD,
-  database: process.env.MYSQL_DATABASE,
-  ssl: { "rejectUnauthorized": true },
-  waitForConnections: true,
-  connectionLimit: 10,
-})
+import { pool } from '@/lib/mysql'
 
 export async function POST(request: Request) {
   try {

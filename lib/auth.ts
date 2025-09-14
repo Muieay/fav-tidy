@@ -1,4 +1,3 @@
-import { use } from 'react';
 import { signJwt,verifyJwt } from './jwt';
 import { cookies } from 'next/headers';
 // 用户类型定义
@@ -14,7 +13,7 @@ export interface AuthResult {
   token?: string;
 }
 
-// 模拟登录验证
+// 登录验证
 export async function authenticateUser(username: string): Promise<AuthResult> {
   const token =  signJwt({ username });
 
