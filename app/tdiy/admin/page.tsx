@@ -31,6 +31,14 @@ interface FormData {
   screenshot_url: string;
 }
 
+interface GitHubRepo {
+  full_name: string;
+  description: string;
+  owner: {
+    avatar_url: string;
+  };
+}
+
 export default function AdminPage() {
   const [projects, setProjects] = useState<FavoriteProject[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
@@ -55,6 +63,7 @@ export default function AdminPage() {
     screenshot_url: ''
   });
   const [formLoading, setFormLoading] = useState(false);
+  const [githubLoading, setGithubLoading] = useState(false);
 
   // 分页状态
   const [currentPage, setCurrentPage] = useState(1);
@@ -218,6 +227,55 @@ export default function AdminPage() {
     return text.slice(0, maxLength) + '...';
   };
 
+  // 从GitHub导入项目信息
+  const importFromGitHub = async () => {
+    const githubUrl = formData.project_url;
+    if (!githubUrl) {
+      setError('请输入GitHub项目地址');
+      return;
+    }
+
+    // 解析GitHub URL获取owner和repo
+    const githubRegex = /^https?:\/\/github\.com\/([^\/]+)\/([^\/]+)(\/.*)?$/;
+    const match = githubUrl.match(githubRegex);
+    
+    if (!match) {
+      setError('请输入有效的GitHub项目地址，格式如: https://github.com/owner/repo');
+      return;
+    }
+
+    const owner = match[1];
+    const repo = match[2];
+
+    setGithubLoading(true);
+    setError(null);
+
+    try {
+      const response = await fetch(`https://api.github.com/repos/${owner}/${repo}`);
+      
+      if (!response.ok) {
+        throw new Error(`GitHub API请求失败: ${response.status} ${response.statusText}`);
+      }
+
+      const repoData: GitHubRepo = await response.json();
+
+      // 更新表单数据
+      setFormData(prev => ({
+        ...prev,
+        project_name: repoData.full_name,
+        project_description: repoData.description || '',
+        favicon_url: repoData.owner.avatar_url
+      }));
+
+      // 显示成功消息
+      // setError('已成功从GitHub导入项目信息');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '从GitHub导入失败');
+    } finally {
+      setGithubLoading(false);
+    }
+  };
+
   if (loading && projects.length === 0) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
@@ -242,7 +300,7 @@ export default function AdminPage() {
             </div>
             <button
               onClick={openCreateForm}
-              className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+              className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium shadow-md hover:shadow-lg"
             >
               + 添加项目
             </button>
@@ -410,14 +468,14 @@ export default function AdminPage() {
                           >
                             删除
                           </button>
-                          <a 
+                          {/* <a 
                             href={project.project_url} 
                             target="_blank" 
                             rel="noopener noreferrer"
                             className="px-3 py-1 text-green-600 hover:text-green-800 transition-colors text-sm"
                           >
                             访问
-                          </a>
+                          </a> */}
                         </div>
                       </td>
                     </tr>
@@ -470,8 +528,8 @@ export default function AdminPage() {
 
         {/* 表单弹窗 */}
         {isFormOpen && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="fixed inset-0 flex items-center justify-center p-4 z-50 bg-white/80 backdrop-blur-sm">
+            <div className="bg-white rounded-xl max-w-7xl w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-200">
               <div className="p-6">
                 <div className="flex items-center justify-between mb-6">
                   <h2 className="text-2xl font-bold text-slate-800">
@@ -479,14 +537,15 @@ export default function AdminPage() {
                   </h2>
                   <button
                     onClick={closeForm}
-                    className="text-slate-400 hover:text-slate-600 text-2xl"
+                    className="text-slate-400 hover:text-slate-600 text-3xl leading-none"
+                    aria-label="关闭弹窗"
                   >
                     ×
                   </button>
                 </div>
 
-                <form onSubmit={handleFormSubmit} className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <form onSubmit={handleFormSubmit} className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="md:col-span-2">
                       <label className="block text-sm font-medium text-slate-700 mb-2">
                         项目名称 *
@@ -496,21 +555,39 @@ export default function AdminPage() {
                         required
                         value={formData.project_name}
                         onChange={(e) => setFormData({...formData, project_name: e.target.value})}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                        placeholder="请输入项目名称"
                       />
                     </div>
 
                     <div className="md:col-span-2">
-                      <label className="block text-sm font-medium text-slate-700 mb-2">
-                        项目地址 *
-                      </label>
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="block text-sm font-medium text-slate-700">
+                          项目地址 *
+                        </label>
+                        <button
+                          type="button"
+                          onClick={importFromGitHub}
+                          disabled={githubLoading || !formData.project_url}
+                          className="text-xs text-blue-600 hover:text-blue-800 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                        >
+                          {githubLoading ? (
+                            <>
+                              <span className="animate-spin h-3 w-3 border-b-2 border-blue-600 rounded-full mr-1"></span>
+                              导入中...
+                            </>
+                          ) : '从GitHub导入'}
+                        </button>
+                      </div>
                       <input
                         type="url"
                         required
                         value={formData.project_url}
                         onChange={(e) => setFormData({...formData, project_url: e.target.value})}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                        placeholder="请输入项目地址，如: https://github.com/owner/repo"
                       />
+                      <p className="mt-2 text-xs text-slate-500">支持GitHub地址一键导入项目信息</p>
                     </div>
 
                     <div className="md:col-span-2">
@@ -521,7 +598,8 @@ export default function AdminPage() {
                         rows={3}
                         value={formData.project_description}
                         onChange={(e) => setFormData({...formData, project_description: e.target.value})}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                        placeholder="请输入项目描述"
                       />
                     </div>
 
@@ -529,18 +607,21 @@ export default function AdminPage() {
                       <label className="block text-sm font-medium text-slate-700 mb-2">
                         分类
                       </label>
-                      <select
-                        value={formData.category}
-                        onChange={(e) => setFormData({...formData, category: e.target.value})}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      >
-                        <option value="">选择分类</option>
-                        {categories.map((category) => (
-                          <option key={category} value={category}>
-                            {category}
-                          </option>
-                        ))}
-                      </select>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          value={formData.category}
+                          onChange={(e) => setFormData({...formData, category: e.target.value})}
+                          className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                          placeholder="输入或选择分类"
+                          list="categories"
+                        />
+                        <datalist id="categories">
+                          {categories.map((category) => (
+                            <option key={category} value={category} />
+                          ))}
+                        </datalist>
+                      </div>
                     </div>
 
                     <div>
@@ -553,7 +634,7 @@ export default function AdminPage() {
                         max="5"
                         value={formData.rating}
                         onChange={(e) => setFormData({...formData, rating: parseInt(e.target.value) || 0})}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
                       />
                     </div>
 
@@ -566,7 +647,7 @@ export default function AdminPage() {
                         value={formData.keywords}
                         onChange={(e) => setFormData({...formData, keywords: e.target.value})}
                         placeholder="如: React, JavaScript, 前端框架"
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
                       />
                     </div>
 
@@ -578,7 +659,8 @@ export default function AdminPage() {
                         type="text"
                         value={formData.tags}
                         onChange={(e) => setFormData({...formData, tags: e.target.value})}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                        placeholder="请输入标签"
                       />
                     </div>
 
@@ -590,7 +672,8 @@ export default function AdminPage() {
                         type="url"
                         value={formData.favicon_url}
                         onChange={(e) => setFormData({...formData, favicon_url: e.target.value})}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                        placeholder="请输入网站图标地址"
                       />
                     </div>
 
@@ -602,28 +685,29 @@ export default function AdminPage() {
                         type="url"
                         value={formData.screenshot_url}
                         onChange={(e) => setFormData({...formData, screenshot_url: e.target.value})}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                        placeholder="请输入截图地址"
                       />
                     </div>
 
                     <div className="md:col-span-2">
-                      <label className="flex items-center">
+                      <label className="flex items-center cursor-pointer">
                         <input
                           type="checkbox"
                           checked={formData.is_public === 1}
                           onChange={(e) => setFormData({...formData, is_public: e.target.checked ? 1 : 0})}
-                          className="mr-2"
+                          className="mr-2 h-4 w-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
                         />
                         <span className="text-sm text-slate-700">公开项目</span>
                       </label>
                     </div>
                   </div>
 
-                  <div className="flex gap-4 pt-4">
+                  <div className="flex gap-4 pt-6">
                     <button
                       type="submit"
                       disabled={formLoading}
-                      className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                      className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 shadow-md hover:shadow-lg"
                     >
                       {formLoading ? '保存中...' : (editingProject ? '更新' : '添加')}
                     </button>
@@ -641,7 +725,7 @@ export default function AdminPage() {
           </div>
         )}
       </div>
-    </div>
+      </div>
     </AuthGuard>
   );
 }

@@ -42,6 +42,14 @@ interface ProjectsByCategory {
   [category: string]: FavoriteProject[];
 }
 
+// 分页信息接口
+interface PaginationInfo {
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+}
+
 export default function Home() {
   const [projects, setProjects] = useState<FavoriteProject[]>([]);
   const [allProjects, setAllProjects] = useState<FavoriteProject[]>([]); // 用于存储所有项目数据
@@ -55,22 +63,31 @@ export default function Home() {
   const [selectedCategory, setSelectedCategory] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  
+  // 分页状态
+  const [pagination, setPagination] = useState<PaginationInfo>({
+    page: 1,
+    pageSize: 24,
+    total: 0,
+    totalPages: 0
+  });
 
   useEffect(() => {
     fetchProjects();
     fetchCategories();
   }, []);
 
-  const fetchProjects = async (search = '', category = '') => {
+  const fetchProjects = async (search = '', category = '', page = 1, resetPagination = false) => {
     try {
-      if (!search && !category) {
+      if (!search && !category && page === 1) {
         setLoading(true);
       } else {
         setSearchLoading(true);
       }
       
       const params = new URLSearchParams({
-        pageSize: '100'
+        page: page.toString(),
+        pageSize: pagination.pageSize.toString()
       });
       
       if (search) params.append('search', search);
@@ -81,10 +98,16 @@ export default function Home() {
       
       if (data.success) {
         setProjects(data.data.list);
-        if (!search && !category) {
-          setAllProjects(data.data.list); // 存储所有项目数据
+        setPagination(data.data.pagination);
+        if (!search && !category && page === 1) {
+          setAllProjects(data.data.list); // 存储第一页的项目数据
         }
         setIsSearching(Boolean(search || category));
+        
+        // 分页切换时滚动到页面顶部
+        if (page > 1 || resetPagination) {
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
       } else {
         setError(data.message || '获取项目数据失败');
       }
@@ -113,16 +136,30 @@ export default function Home() {
   const handleSearch = (keyword: string, category: string) => {
     setSearchKeyword(keyword);
     setSelectedCategory(category);
-    fetchProjects(keyword, category);
+    // 搜索时重置到第一页
+    fetchProjects(keyword, category, 1, true);
   };
 
   // 清除搜索
   const clearSearch = () => {
     setSearchKeyword('');
     setSelectedCategory('');
-    setProjects(allProjects);
     setIsSearching(false);
+    // 清除搜索时重置到第一页
+    fetchProjects('', '', 1, true);
   };
+
+  // 处理分页
+  const handlePageChange = (newPage: number) => {
+    if (newPage >= 1 && newPage <= pagination.totalPages && newPage !== pagination.page) {
+      fetchProjects(searchKeyword, selectedCategory, newPage);
+    }
+  };
+
+  // 防抖搜索
+  const debouncedSearch = useDebounce((keyword: string, category: string) => {
+    handleSearch(keyword, category);
+  }, 500);
 
   // 按分类组织项目
   const projectsByCategory: ProjectsByCategory = projects.reduce((acc, project) => {
@@ -172,7 +209,7 @@ export default function Home() {
       <div className="container mx-auto px-4 py-8 max-w-7xl">
         {/* 页面标题 */}
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold mb-4">项目收藏</h1>
+          {/* <h1 className="text-4xl font-bold mb-4">项目收藏</h1> */}
           <p className="text-foreground/70 text-lg">发现和管理你喜爱的项目</p>
         </div>
 
@@ -193,7 +230,12 @@ export default function Home() {
                         handleSearch(searchInputRef.current?.value || '', selectedCategory);
                       }
                     }}
-                    onChange={(e) => setSearchKeyword(e.target.value)}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setSearchKeyword(value);
+                      // 使用防抖搜索
+                      debouncedSearch(value, selectedCategory);
+                    }}
                     className="w-full px-4 py-3 pr-10 border border-foreground/20 rounded-lg bg-background text-foreground placeholder-foreground/50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                   />
                   {searchLoading && (
@@ -216,7 +258,11 @@ export default function Home() {
               <div className="md:w-48">
                 <select
                   value={selectedCategory}
-                  onChange={(e) => setSelectedCategory(e.target.value)}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setSelectedCategory(value);
+                    handleSearch(searchKeyword, value);
+                  }}
                   className="w-full px-4 py-3 border border-foreground/20 rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                 >
                   <option value="">所有分类</option>
@@ -249,16 +295,28 @@ export default function Home() {
             </div>
             
             {/* 搜索结果统计 */}
-            {isSearching && (
+            {(isSearching || pagination.total > 0) && (
               <div className="mt-4 text-sm text-foreground/60">
                 {searchLoading ? (
                   <span>搜索中...</span>
                 ) : (
-                  <span>
-                    找到 {projects.length} 个项目
-                    {searchKeyword && ` 包含 "${searchKeyword}"`}
-                    {selectedCategory && ` 在分类 "${selectedCategory}" 中`}
-                  </span>
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                    <span>
+                      {isSearching ? (
+                        <>
+                          找到 {pagination.total} 个项目
+                          {searchKeyword && ` 包含 "${searchKeyword}"`}
+                          {selectedCategory && ` 在分类 "${selectedCategory}" 中`}
+                        </>
+                      ) : (
+                        <>共 {pagination.total} 个项目</>
+                      )}
+                    </span>
+                    <span>
+                      显示第 {pagination.total === 0 ? 0 : (pagination.page - 1) * pagination.pageSize + 1} - {Math.min(pagination.page * pagination.pageSize, pagination.total)} 项，
+                      第 {pagination.page} / {pagination.totalPages || 1} 页
+                    </span>
+                  </div>
                 )}
               </div>
             )}
@@ -295,42 +353,60 @@ export default function Home() {
                       key={project.id} 
                       className="bg-background border border-foreground/10 rounded-lg p-6 hover:shadow-lg hover:border-foreground/20 transition-all duration-200 group"
                     >
-                      {/* 项目名称 - 可点击链接 */}
+                      {/* 项目头部：favicon + 项目名称 */}
                       <div className="mb-4">
-                        <a 
-                          href={project.project_url} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="text-xl font-semibold text-foreground hover:text-blue-600 dark:hover:text-blue-400 transition-colors duration-200 block group-hover:underline"
-                          title={`访问 ${project.project_name}`}
-                        >
-                          {searchKeyword && project.project_name.toLowerCase().includes(searchKeyword.toLowerCase()) ? (
-                            <span
-                              dangerouslySetInnerHTML={{
-                                __html: project.project_name.replace(
-                                  new RegExp(`(${searchKeyword})`, 'gi'),
-                                  '<mark class="bg-yellow-200 dark:bg-yellow-800 px-1 rounded">$1</mark>'
-                                )
+                        <div className="flex items-center gap-3">
+                          {/* Favicon 显示 */}
+                          {project.favicon_url && (
+                            <img 
+                              src={project.favicon_url} 
+                              alt={`${project.project_name} favicon`}
+                              className="w-6 h-6 flex-shrink-0 rounded"
+                              onError={(e) => {
+                                // 如果 favicon 加载失败，隐藏图片
+                                e.currentTarget.style.display = 'none';
                               }}
                             />
-                          ) : (
-                            project.project_name
                           )}
-                        </a>
+                          
+                          {/* 项目名称 - 可点击链接，限制长度防止溢出 */}
+                          <a 
+                            href={project.project_url} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="text-xl font-semibold text-foreground hover:text-blue-600 dark:hover:text-blue-400 transition-colors duration-200 group-hover:underline flex-1 min-w-0"
+                            title={`访问 ${project.project_name}`}
+                          >
+                            <div className="truncate">
+                              {searchKeyword && project.project_name.toLowerCase().includes(searchKeyword.toLowerCase()) ? (
+                                <span
+                                  dangerouslySetInnerHTML={{
+                                    __html: truncateText(project.project_name, 30).replace(
+                                      new RegExp(`(${searchKeyword})`, 'gi'),
+                                      '<mark class="bg-yellow-200 dark:bg-yellow-800 px-1 rounded">$1</mark>'
+                                    )
+                                  }}
+                                />
+                              ) : (
+                                truncateText(project.project_name, 30)
+                              )}
+                            </div>
+                          </a>
+                        </div>
                       </div>
 
                       {/* 项目详细介绍 */}
                       <div className="mb-4">
                         <div className="relative">
-                          <p 
-                            className="text-foreground/80 leading-relaxed cursor-help" 
-                            title={project.project_description}
-                          >
-                            {truncateText(project.project_description, 120)}
+                          <p className="text-foreground/80 leading-relaxed">
+                            {truncateText(project.project_description, 80)}
                           </p>
-                          {project.project_description && project.project_description.length > 120 && (
-                            <div className="absolute invisible group-hover:visible bg-foreground text-background p-3 rounded-lg shadow-lg z-10 top-full left-0 right-0 mt-2 text-sm leading-relaxed max-w-md">
-                              {project.project_description}
+                          {project.project_description && project.project_description.length > 80 && (
+                            <div className="absolute invisible group-hover:visible bg-background/90 backdrop-blur-sm text-foreground p-3 rounded-xl shadow-xl border border-foreground/10 z-20 top-full left-0 mt-2 text-sm leading-relaxed w-90 max-h-52 overflow-y-auto transition-all duration-200">
+                              <div className="break-words">
+                                {project.project_description}
+                              </div>
+                              <div className="absolute -top-1.5 left-4 w-3 h-3 bg-background/90 border-l border-t border-foreground/10 transform rotate-45 backdrop-blur-sm"></div>
                             </div>
                           )}
                         </div>
@@ -364,8 +440,8 @@ export default function Home() {
                               )}
                             </div>
                             {project.keywords.split(',').length > 3 && (
-                              <div className="absolute invisible group-hover:visible bg-foreground text-background p-3 rounded-lg shadow-lg z-10 top-full left-0 mt-2 text-sm whitespace-nowrap">
-                                <div className="flex flex-wrap gap-1 max-w-xs">
+                              <div className="absolute invisible group-hover:visible bg-foreground text-background p-3 rounded-lg shadow-lg z-20 top-full left-0 mt-2 text-sm w-72 max-h-24 overflow-y-auto">
+                                <div className="flex flex-wrap gap-1">
                                   {project.keywords.split(',').map((keyword, index) => {
                                     const trimmedKeyword = keyword.trim();
                                     const isHighlighted = searchKeyword && trimmedKeyword.toLowerCase().includes(searchKeyword.toLowerCase());
@@ -413,8 +489,140 @@ export default function Home() {
                 </div>
               </div>
             ))}
+            
+            {/* 分页组件 */}
+            {pagination.totalPages > 1 && (
+              <div className="mt-12 flex justify-center">
+                <div className="flex items-center space-x-2">
+                  {/* 上一页按钮 */}
+                  <button
+                    onClick={() => handlePageChange(pagination.page - 1)}
+                    disabled={pagination.page <= 1}
+                    className="px-3 py-2 border border-foreground/20 rounded-md bg-background text-foreground hover:bg-foreground/5 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                  >
+                    上一页
+                  </button>
+                  
+                  {/* 页码按钮 */}
+                  <div className="flex items-center space-x-1">
+                    {/* 智能显示页码 */}
+                    {(() => {
+                      const { page, totalPages } = pagination;
+                      const pages = [];
+                      
+                      if (totalPages <= 7) {
+                        // 总页数少于等于7页，显示所有页码
+                        for (let i = 1; i <= totalPages; i++) {
+                          pages.push(i);
+                        }
+                      } else {
+                        // 总页数大于7页，智能显示
+                        if (page <= 4) {
+                          // 当前页在前4页
+                          pages.push(1, 2, 3, 4, 5, '...', totalPages);
+                        } else if (page >= totalPages - 3) {
+                          // 当前页在后4页
+                          pages.push(1, '...', totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages);
+                        } else {
+                          // 当前页在中间
+                          pages.push(1, '...', page - 1, page, page + 1, '...', totalPages);
+                        }
+                      }
+                      
+                      return pages.map((pageNum, index) => {
+                        if (pageNum === '...') {
+                          return (
+                            <span key={`ellipsis-${index}`} className="px-2 py-2 text-foreground/50">
+                              ...
+                            </span>
+                          );
+                        }
+                        
+                        const isActive = pageNum === page;
+                        return (
+                          <button
+                            key={pageNum}
+                            onClick={() => handlePageChange(pageNum as number)}
+                            className={`w-10 h-10 rounded-md transition-all ${
+                              isActive
+                                ? 'bg-foreground text-background'
+                                : 'border border-foreground/20 bg-background text-foreground hover:bg-foreground/5'
+                            }`}
+                          >
+                            {pageNum}
+                          </button>
+                        );
+                      });
+                    })()} 
+                  </div>
+                  
+                  {/* 下一页按钮 */}
+                  <button
+                    onClick={() => handlePageChange(pagination.page + 1)}
+                    disabled={pagination.page >= pagination.totalPages}
+                    className="px-3 py-2 border border-foreground/20 rounded-md bg-background text-foreground hover:bg-foreground/5 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                  >
+                    下一页
+                  </button>
+                  
+                  {/* 快速跳转 */}
+                  <div className="ml-4 flex items-center space-x-2">
+                    <span className="text-sm text-foreground/70">跳转到</span>
+                    <input
+                      type="number"
+                      min="1"
+                      max={pagination.totalPages}
+                      className="w-16 px-2 py-1 border border-foreground/20 rounded bg-background text-foreground text-center text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          const value = parseInt((e.target as HTMLInputElement).value);
+                          if (value >= 1 && value <= pagination.totalPages) {
+                            handlePageChange(value);
+                            (e.target as HTMLInputElement).value = '';
+                          }
+                        }
+                      }}
+                    />
+                    <span className="text-sm text-foreground/70">页</span>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
+        
+        {/* Copyright 页脚 */}
+        <footer className="mt-16 border-t border-foreground/10 pt-8 pb-6">
+          <div className="text-center">
+            <div className="flex flex-col md:flex-row items-center justify-center md:justify-between gap-4 max-w-4xl mx-auto">
+              <div className="text-sm text-foreground/60">
+                <p>© 2023 ~ {new Date().getFullYear()} &nbsp;&nbsp;&nbsp;&nbsp;项目收藏夹</p>
+              </div>
+              <div className="flex items-center space-x-6 text-sm text-foreground/60">
+                <a 
+                  href="https://github.com/muieay" 
+                  target="_blank" 
+                  rel="noopener noreferrer" 
+                  className="hover:text-foreground transition-colors"
+                >
+                  GitHub
+                </a>
+                <a 
+                  href="https://muieay.github.io/WeChat/" 
+                  className="hover:text-foreground transition-colors"
+                >
+                  联系我们
+                </a>
+                <span className="hover:text-foreground transition-colors cursor-pointer">
+                  帮助中心
+                </span>
+              </div>
+            </div>
+            <div className="mt-4 text-xs text-foreground/50">
+              <p>用心整理，高效管理 - 让收藏更有价值</p>
+            </div>
+          </div>
+        </footer>
       </div>
     </div>
   );
