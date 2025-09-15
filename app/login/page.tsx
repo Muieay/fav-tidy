@@ -1,11 +1,13 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { useAuth } from '../contexts/AuthContext';
 import Image from 'next/image';
 
 export default function Login() {
   const router = useRouter();
+  const { login, user, loading } = useAuth();
   const [formData, setFormData] = useState({
     username: '',
     password: ''
@@ -16,6 +18,13 @@ export default function Login() {
   });
   const [isLoading, setIsLoading] = useState(false);
   const [loginError, setLoginError] = useState('');
+
+  // 如果用户已登录，重定向到首页
+  useEffect(() => {
+    if (!loading && user) {
+      router.push('/');
+    }
+  }, [user, loading, router]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -63,22 +72,14 @@ export default function Login() {
     setIsLoading(true);
     
     try {
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(formData)
-      });
+      const success = await login(formData.username, formData.password);
       
-      const data = await response.json();
-      
-      if (data.success) {
+      if (success) {
         // 登录成功，跳转到首页
         router.push('/');
       } else {
         // 登录失败，显示错误信息
-        setLoginError(data.message || '登录失败，请检查用户名和密码');
+        setLoginError('登录失败，请检查用户名和密码');
       }
     } catch (error) {
       setLoginError('登录请求失败，请稍后再试');
@@ -88,6 +89,17 @@ export default function Login() {
     }
   };
 
+  // 如果正在加载或用户已登录，显示加载状态
+  if (loading || user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600 dark:text-gray-400">正在跳转...</p>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8 bg-white dark:bg-gray-800 p-8 rounded-xl shadow-md">
