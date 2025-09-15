@@ -48,6 +48,9 @@ export async function OPTIONS(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
     try {
+        // 检查用户是否登录
+        const user = await getCurrentUser();
+        
         const { searchParams } = new URL(request.url);
         const page = parseInt(searchParams.get('page') || '1', 10);
         const pageSize = parseInt(searchParams.get('pageSize') || '10', 10);
@@ -82,6 +85,12 @@ export async function GET(request: NextRequest) {
         if (category.trim()) {
             whereConditions.push('category = ?');
             queryParams.push(category.trim());
+        }
+        
+        // 如果用户未登录，只显示公开内容
+        if (!user) {
+            whereConditions.push('is_public = ?');
+            queryParams.push(1);
         }
         
         // 构建WHERE子句
