@@ -137,7 +137,7 @@ export default function AdminPage() {
       keywords: '',
       category: '',
       rating: 0,
-      is_public: 0,
+      is_public: 1,
       tags: '',
       favicon_url: '',
       screenshot_url: ''
