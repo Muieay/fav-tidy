@@ -2,6 +2,8 @@
 
 这是一个基于 Next.js 构建的项目收藏管理系统，可以帮助用户收集、分类和管理喜爱的项目。
 
+使用Vercel+TiDB无服务器搭建免费站点。
+
 ## 功能特性
 
 - 项目收藏管理（添加、编辑、删除、查询）
@@ -39,6 +41,10 @@ MYSQL_PORT=3306
 ```
 
 ## 数据库表结构
+以下可以免费使用数据库资源：
+1. [TiDB](https://tidbcloud.com/)（推荐）
+2. [CockroachDB](https://www.cockroachlabs.com/)
+
 
 系统需要以下数据库表结构：
 

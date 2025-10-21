@@ -67,7 +67,7 @@ export default function Home() {
   // 分页状态
   const [pagination, setPagination] = useState<PaginationInfo>({
     page: 1,
-    pageSize: 24,
+    pageSize: 60,
     total: 0,
     totalPages: 0
   });
