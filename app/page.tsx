@@ -159,7 +159,7 @@ export default function Home() {
   // 防抖搜索
   const debouncedSearch = useDebounce((keyword: string, category: string) => {
     handleSearch(keyword, category);
-  }, 2100);
+  }, 3100);
 
   // 按分类组织项目
   const projectsByCategory: ProjectsByCategory = projects.reduce((acc, project) => {

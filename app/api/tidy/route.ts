@@ -2,26 +2,6 @@ import { pool } from '@/lib/mysql'
 import { NextRequest } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
 
-// 项目收藏表
-// CREATE TABLE `fav_favorites` (
-//     `id` int UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键ID',
-//     `project_name` VARCHAR(255) NOT NULL COMMENT '项目名称',
-//     `project_url` VARCHAR(500) NOT NULL COMMENT '项目地址',
-//     `project_description` TEXT COMMENT '项目详细介绍',
-//     `keywords` VARCHAR(500) COMMENT '项目关键词（逗号分隔）',
-//     `search_tokens` TEXT COMMENT '搜索分词（用于全文搜索，存储分词结果）',
-//     `category` VARCHAR(100) COMMENT '项目分类',
-//     `rating` TINYINT UNSIGNED DEFAULT 0 COMMENT '评分（0-5）',
-//     `is_public` TINYINT(1) DEFAULT 0 COMMENT '是否公开（0:私有, 1:公开）',
-//     `tags` VARCHAR(300) COMMENT '标签（逗号分隔）',
-//     `favicon_url` VARCHAR(500) COMMENT '网站图标地址',
-//     `screenshot_url` VARCHAR(500) COMMENT '项目截图地址',
-//     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-//     `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-//     PRIMARY KEY (`id`),
-//     FULLTEXT INDEX `idx_search` (`project_name`, `project_description`, `keywords`)
-// ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
 // 获取所有分类的API
 export async function OPTIONS(request: NextRequest) {
     try {
@@ -76,9 +56,9 @@ export async function GET(request: NextRequest) {
         if (search.trim()) {
             const searchTerm = `%${search.trim()}%`;
             whereConditions.push(
-                '(project_name LIKE ? OR keywords LIKE ? OR project_description LIKE ? OR tags LIKE ?)'
+                '(project_name LIKE ? OR search_tokens LIKE ? )'
             );
-            queryParams.push(searchTerm, searchTerm, searchTerm, searchTerm);
+            queryParams.push(searchTerm, searchTerm);
         }
         
         // 分类筛选
@@ -172,9 +152,9 @@ export async function POST(request: NextRequest) {
 
         // 构建搜索索引字段（将项目名称、介绍、关键词合并用于搜索）
         const searchTokens = [
-            project_name,
             project_description || '',
-            keywords || ''
+            keywords || '',
+            tags || '',
         ].filter(Boolean).join(' ');
 
         const [result] = await pool.query(
@@ -225,6 +205,7 @@ export async function PUT(request: NextRequest) {
             }, { status: 401 });
         }
         const body = await request.json();
+        console.log(body);
         const { id, ...updateData } = body;
 
         // 检查ID是否存在
@@ -233,6 +214,25 @@ export async function PUT(request: NextRequest) {
                 success: false,
                 message: '缺少项目ID'
             }, { status: 400 });
+        }
+
+        // 检查是否需要更新search_tokens
+        const shouldUpdateSearchTokens = 
+            updateData.hasOwnProperty('keywords') || 
+            updateData.hasOwnProperty('tags') || 
+            updateData.hasOwnProperty('project_description');
+
+        // 如果需要更新search_tokens，直接使用传入的数据构建
+        if (shouldUpdateSearchTokens) {
+            // 使用传入的数据构建搜索索引
+            const searchTokens = [
+                updateData.project_description || '',
+                updateData.keywords || '',
+                updateData.tags || '',
+            ].filter(Boolean).join(' ');
+
+            // 将search_tokens添加到更新数据中
+            updateData.search_tokens = searchTokens;
         }
 
         // 构建更新语句

@@ -70,11 +70,32 @@ export default function AdminPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
   const pageSize = 10;
+  
+  // 防抖定时器引用
+  const searchDebounceTimer = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     fetchProjects();
     fetchCategories();
-  }, [currentPage, searchKeyword, selectedCategory]);
+  }, [currentPage, selectedCategory]);
+
+  // 监听搜索关键词变化，添加防抖
+  useEffect(() => {
+    if (searchDebounceTimer.current) {
+      clearTimeout(searchDebounceTimer.current);
+    }
+    
+    searchDebounceTimer.current = setTimeout(() => {
+      setCurrentPage(1);
+      fetchProjects();
+    }, 3100); // 2100ms 防抖延迟
+    
+    return () => {
+      if (searchDebounceTimer.current) {
+        clearTimeout(searchDebounceTimer.current);
+      }
+    };
+  }, [searchKeyword]);
 
   const fetchProjects = async () => {
     try {
@@ -317,7 +338,17 @@ export default function AdminPage() {
                   placeholder="搜索项目名称、关键词或描述..."
                   value={searchKeyword}
                   onChange={(e) => setSearchKeyword(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                  onKeyDown={(e) => {
+                    // 清除防抖定时器
+                    if (searchDebounceTimer.current) {
+                      clearTimeout(searchDebounceTimer.current);
+                    }
+                    // 立即搜索
+                    if (e.key === 'Enter') {
+                      setCurrentPage(1);
+                      fetchProjects();
+                    }
+                  }}
                   className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
@@ -600,7 +631,11 @@ export default function AdminPage() {
                         onChange={(e) => setFormData({...formData, project_description: e.target.value})}
                         className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
                         placeholder="请输入项目描述"
+                        maxLength={350}
                       />
+                      <div className="flex justify-end text-sm text-slate-500 mt-1">
+                        <span>{formData.project_description.length}/350</span>
+                      </div>
                     </div>
 
                     <div>
@@ -648,7 +683,11 @@ export default function AdminPage() {
                         onChange={(e) => setFormData({...formData, keywords: e.target.value})}
                         placeholder="如: React, JavaScript, 前端框架"
                         className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                        maxLength={20}
                       />
+                      <div className="flex justify-end text-sm text-slate-500 mt-1">
+                        <span>{formData.keywords.length}/20</span>
+                      </div>
                     </div>
 
                     <div className="md:col-span-2">
@@ -661,7 +700,11 @@ export default function AdminPage() {
                         onChange={(e) => setFormData({...formData, tags: e.target.value})}
                         className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
                         placeholder="请输入标签"
+                        maxLength={50}
                       />
+                      <div className="flex justify-end text-sm text-slate-500 mt-1">
+                        <span>{formData.tags.length}/50</span>
+                      </div>
                     </div>
 
                     <div>

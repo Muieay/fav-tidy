@@ -49,24 +49,24 @@ MYSQL_PORT=3306
 系统需要以下数据库表结构：
 
 ```sql
-CREATE TABLE `fav_favorites` (
-    `id` int UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键ID',
-    `project_name` VARCHAR(255) NOT NULL COMMENT '项目名称',
-    `project_url` VARCHAR(500) NOT NULL COMMENT '项目地址',
-    `project_description` TEXT COMMENT '项目详细介绍',
-    `keywords` VARCHAR(500) COMMENT '项目关键词（逗号分隔）',
-    `search_tokens` TEXT COMMENT '搜索分词（用于全文搜索，存储分词结果）',
-    `category` VARCHAR(100) COMMENT '项目分类',
-    `rating` TINYINT UNSIGNED DEFAULT 0 COMMENT '评分（0-5）',
-    `is_public` TINYINT(1) DEFAULT 0 COMMENT '是否公开（0:私有, 1:公开）',
-    `tags` VARCHAR(300) COMMENT '标签（逗号分隔）',
-    `favicon_url` VARCHAR(500) COMMENT '网站图标地址',
-    `screenshot_url` VARCHAR(500) COMMENT '项目截图地址',
-    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    PRIMARY KEY (`id`),
-    FULLTEXT INDEX `idx_search` (`project_name`, `project_description`, `keywords`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+create table fav_favorites(
+    id int unsigned auto_increment comment '主键ID' primary key,
+    project_name varchar(255) not null comment '项目名称',
+    project_url varchar(500) not null comment '项目地址',
+    project_description varchar(400) null comment '项目详细介绍',
+    keywords varchar(20) null comment '项目关键词（逗号分隔）',
+    search_tokens varchar(500) null comment '搜索分词（用于全文搜索，存储分词结果）',
+    category varchar(100) null comment '项目分类',
+    rating tinyint unsigned default 0 null comment '评分（0-5）',
+    is_public tinyint(1) default 0 null comment '是否公开（0:私有, 1:公开）',
+    tags varchar(80) null comment '标签（逗号分隔）',
+    favicon_url varchar(500) null comment '网站图标地址',
+    screenshot_url varchar(500) null comment '项目截图地址',
+    created_at timestamp default CURRENT_TIMESTAMP null comment '创建时间',
+    updated_at timestamp default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP comment '更新时间',
+    constraint fav_favorites_unique
+      unique (project_url)
+)comment '项目收藏表';
 ```
 
 ## 安装与运行
