@@ -72,13 +72,13 @@ export async function GET(request: NextRequest) {
         let whereConditions = [];
         let queryParams = [];
         
-        // 搜索条件：支持项目名称、关键词、项目介绍的模糊搜索
+        // 搜索条件：支持项目名称、关键词、标签、项目介绍的模糊搜索
         if (search.trim()) {
             const searchTerm = `%${search.trim()}%`;
             whereConditions.push(
-                '(project_name LIKE ? OR keywords LIKE ? OR project_description LIKE ?)'
+                '(project_name LIKE ? OR keywords LIKE ? OR project_description LIKE ? OR tags LIKE ?)'
             );
-            queryParams.push(searchTerm, searchTerm, searchTerm);
+            queryParams.push(searchTerm, searchTerm, searchTerm, searchTerm);
         }
         
         // 分类筛选
