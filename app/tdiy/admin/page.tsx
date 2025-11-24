@@ -34,6 +34,8 @@ interface FormData {
 interface GitHubRepo {
   full_name: string;
   description: string;
+  watchers: number;
+  language: string;
   owner: {
     avatar_url: string;
   };
@@ -285,7 +287,9 @@ export default function AdminPage() {
         ...prev,
         project_name: repoData.full_name,
         project_description: repoData.description || '',
-        favicon_url: repoData.owner.avatar_url
+        favicon_url: repoData.owner.avatar_url,
+        rating: repoData.watchers || 0,
+        tags: repoData.language || '',
       }));
 
       // 显示成功消息
@@ -661,12 +665,12 @@ export default function AdminPage() {
 
                     <div>
                       <label className="block text-sm font-medium text-slate-700 mb-2">
-                        评分 (0-5)
+                        评分
                       </label>
                       <input
                         type="number"
                         min="0"
-                        max="5"
+                        max="999999999"
                         value={formData.rating}
                         onChange={(e) => setFormData({...formData, rating: parseInt(e.target.value) || 0})}
                         className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"

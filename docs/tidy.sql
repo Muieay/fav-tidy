@@ -24,7 +24,7 @@ create table fav_favorites
     keywords            varchar(20)                                null comment '项目关键词（逗号分隔）',
     search_tokens       varchar(500)                               null comment '搜索分词（用于全文搜索，存储分词结果）',
     category            varchar(100)                               null comment '项目分类',
-    rating              tinyint unsigned default 0                 null comment '评分（0-5）',
+    rating              int unsigned default 0                 null comment '评分',
     is_public           tinyint(1)       default 0                 null comment '是否公开（0:私有, 1:公开）',
     tags                varchar(80)                                null comment '标签（逗号分隔）',
     favicon_url         varchar(500)                               null comment '网站图标地址',
