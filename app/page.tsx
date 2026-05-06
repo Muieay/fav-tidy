@@ -1,5 +1,6 @@
 "use client"
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { appCache, CACHE_TTL, CACHE_PREFIX } from '@/lib/cache';
 
 // 简单的防抖函数实现
 function useDebounce<T extends (...args: any[]) => any>(
@@ -56,6 +57,7 @@ export default function Home() {
   const [categories, setCategories] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchLoading, setSearchLoading] = useState(false);
+  const [loadSource, setLoadSource] = useState<'initial' | 'cache' | 'network'>('initial');
   const [error, setError] = useState<string | null>(null);
   
   // 搜索状态
@@ -78,12 +80,42 @@ export default function Home() {
   }, []);
 
   const fetchProjects = async (search = '', category = '', page = 1, resetPagination = false) => {
+    const cacheKey = appCache.generateKey({
+      prefix: CACHE_PREFIX.PROJECTS_LIST,
+      search: search || '_all',
+      category: category || '_all',
+      page,
+      pageSize: pagination.pageSize,
+    });
+
+    const cachedData = appCache.get<{
+      list: FavoriteProject[];
+      pagination: PaginationInfo;
+    }>(cacheKey);
+
+    if (cachedData) {
+      setProjects(cachedData.list);
+      setPagination(cachedData.pagination);
+      if (!search && !category && page === 1) {
+        setAllProjects(cachedData.list);
+      }
+      setIsSearching(Boolean(search || category));
+      setLoadSource('cache');
+      setLoading(false);
+      setSearchLoading(false);
+      if (page > 1 || resetPagination) {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+      return;
+    }
+
     try {
       if (!search && !category && page === 1) {
         setLoading(true);
       } else {
         setSearchLoading(true);
       }
+      setLoadSource('network');
       
       const params = new URLSearchParams({
         page: page.toString(),
@@ -100,11 +132,15 @@ export default function Home() {
         setProjects(data.data.list);
         setPagination(data.data.pagination);
         if (!search && !category && page === 1) {
-          setAllProjects(data.data.list); // 存储第一页的项目数据
+          setAllProjects(data.data.list);
         }
         setIsSearching(Boolean(search || category));
+
+        appCache.set(cacheKey, {
+          list: data.data.list,
+          pagination: data.data.pagination,
+        }, CACHE_TTL.PROJECTS_LIST);
         
-        // 分页切换时滚动到页面顶部
         if (page > 1 || resetPagination) {
           window.scrollTo({ top: 0, behavior: 'smooth' });
         }
@@ -120,12 +156,21 @@ export default function Home() {
   };
 
   const fetchCategories = async () => {
+    const cacheKey = appCache.generateKey({ prefix: CACHE_PREFIX.CATEGORIES });
+    const cachedCategories = appCache.get<string[]>(cacheKey);
+
+    if (cachedCategories) {
+      setCategories(cachedCategories);
+      return;
+    }
+
     try {
       const response = await fetch('/api/tidy', { method: 'OPTIONS' });
       const data = await response.json();
       
       if (data.success) {
         setCategories(data.data.categories);
+        appCache.set(cacheKey, data.data.categories, CACHE_TTL.CATEGORIES);
       }
     } catch (err) {
       console.error('获取分类失败:', err);
@@ -182,7 +227,9 @@ export default function Home() {
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-foreground mx-auto mb-4"></div>
-          <p className="text-foreground/70">加载中...</p>
+          <p className="text-foreground/70">
+            {loadSource === 'initial' ? '首次加载中...' : '正在获取最新数据...'}
+          </p>
         </div>
       </div>
     );

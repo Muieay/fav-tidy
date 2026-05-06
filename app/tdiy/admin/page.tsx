@@ -1,6 +1,7 @@
 "use client"
 import { useEffect, useState, useRef } from 'react';
 import AuthGuard from '../../components/AuthGuard';
+import { appCache, CACHE_TTL, CACHE_PREFIX } from '@/lib/cache';
 
 interface FavoriteProject {
   id: number;
@@ -45,6 +46,7 @@ export default function AdminPage() {
   const [projects, setProjects] = useState<FavoriteProject[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadSource, setLoadSource] = useState<'initial' | 'cache' | 'network'>('initial');
   const [error, setError] = useState<string | null>(null);
   const [searchKeyword, setSearchKeyword] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
@@ -100,8 +102,31 @@ export default function AdminPage() {
   }, [searchKeyword]);
 
   const fetchProjects = async () => {
+    const cacheKey = appCache.generateKey({
+      prefix: CACHE_PREFIX.PROJECTS_LIST,
+      search: searchKeyword || '_all',
+      category: selectedCategory || '_all',
+      page: currentPage,
+      pageSize,
+    });
+
+    const cachedData = appCache.get<{
+      list: FavoriteProject[];
+      pagination: { total: number; totalPages: number };
+    }>(cacheKey);
+
+    if (cachedData) {
+      setProjects(cachedData.list);
+      setTotalPages(cachedData.pagination.totalPages);
+      setTotal(cachedData.pagination.total);
+      setLoadSource('cache');
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
+      setLoadSource('network');
       const params = new URLSearchParams({
         page: currentPage.toString(),
         pageSize: pageSize.toString()
@@ -117,6 +142,11 @@ export default function AdminPage() {
         setProjects(data.data.list);
         setTotalPages(data.data.pagination.totalPages);
         setTotal(data.data.pagination.total);
+
+        appCache.set(cacheKey, {
+          list: data.data.list,
+          pagination: data.data.pagination,
+        }, CACHE_TTL.PROJECTS_LIST);
       } else {
         setError(data.message || '获取项目数据失败');
       }
@@ -128,12 +158,21 @@ export default function AdminPage() {
   };
 
   const fetchCategories = async () => {
+    const cacheKey = appCache.generateKey({ prefix: CACHE_PREFIX.CATEGORIES });
+    const cachedCategories = appCache.get<string[]>(cacheKey);
+
+    if (cachedCategories) {
+      setCategories(cachedCategories);
+      return;
+    }
+
     try {
       const response = await fetch('/api/tidy', { method: 'OPTIONS' });
       const data = await response.json();
       
       if (data.success) {
         setCategories(data.data.categories);
+        appCache.set(cacheKey, data.data.categories, CACHE_TTL.CATEGORIES);
       }
     } catch (err) {
       console.error('获取分类失败:', err);
@@ -212,9 +251,11 @@ export default function AdminPage() {
       const data = await response.json();
 
       if (data.success) {
+        appCache.invalidateByPrefix(CACHE_PREFIX.PROJECTS_LIST);
+        appCache.invalidate(appCache.generateKey({ prefix: CACHE_PREFIX.CATEGORIES }));
         closeForm();
         fetchProjects();
-        fetchCategories(); // 重新获取分类，防止新分类未显示
+        fetchCategories();
       } else {
         setError(data.message || '操作失败');
       }
@@ -236,6 +277,8 @@ export default function AdminPage() {
       const data = await response.json();
 
       if (data.success) {
+        appCache.invalidateByPrefix(CACHE_PREFIX.PROJECTS_LIST);
+        appCache.invalidate(appCache.generateKey({ prefix: CACHE_PREFIX.CATEGORIES }));
         fetchProjects();
       } else {
         setError(data.message || '删除失败');
@@ -306,7 +349,9 @@ export default function AdminPage() {
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-slate-600 mx-auto mb-4"></div>
-          <p className="text-slate-600">加载中...</p>
+          <p className="text-slate-600">
+            {loadSource === 'initial' ? '首次加载中...' : '正在获取最新数据...'}
+          </p>
         </div>
       </div>
     );
@@ -393,6 +438,11 @@ export default function AdminPage() {
               共找到 {total} 个项目
               {searchKeyword && ` 包含 "${searchKeyword}"`}
               {selectedCategory && ` 在分类 "${selectedCategory}" 中`}
+              {loadSource === 'cache' && (
+                <span className="ml-2 text-xs text-green-600" title="数据来自本地缓存">
+                  ● 缓存
+                </span>
+              )}
             </div>
           </div>
         </div>
