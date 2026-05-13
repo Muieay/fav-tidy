@@ -101,7 +101,7 @@ export default function AdminPage() {
     };
   }, [searchKeyword]);
 
-  const fetchProjects = async () => {
+  const fetchProjects = async (skipCache = false) => {
     const cacheKey = appCache.generateKey({
       prefix: CACHE_PREFIX.PROJECTS_LIST,
       search: searchKeyword || '_all',
@@ -110,18 +110,20 @@ export default function AdminPage() {
       pageSize,
     });
 
-    const cachedData = appCache.get<{
-      list: FavoriteProject[];
-      pagination: { total: number; totalPages: number };
-    }>(cacheKey);
+    if (!skipCache) {
+      const cachedData = appCache.get<{
+        list: FavoriteProject[];
+        pagination: { total: number; totalPages: number };
+      }>(cacheKey);
 
-    if (cachedData) {
-      setProjects(cachedData.list);
-      setTotalPages(cachedData.pagination.totalPages);
-      setTotal(cachedData.pagination.total);
-      setLoadSource('cache');
-      setLoading(false);
-      return;
+      if (cachedData) {
+        setProjects(cachedData.list);
+        setTotalPages(cachedData.pagination.totalPages);
+        setTotal(cachedData.pagination.total);
+        setLoadSource('cache');
+        setLoading(false);
+        return;
+      }
     }
 
     try {
@@ -254,7 +256,7 @@ export default function AdminPage() {
         appCache.invalidateByPrefix(CACHE_PREFIX.PROJECTS_LIST);
         appCache.invalidate(appCache.generateKey({ prefix: CACHE_PREFIX.CATEGORIES }));
         closeForm();
-        fetchProjects();
+        fetchProjects(true);
         fetchCategories();
       } else {
         setError(data.message || '操作失败');
@@ -279,7 +281,7 @@ export default function AdminPage() {
       if (data.success) {
         appCache.invalidateByPrefix(CACHE_PREFIX.PROJECTS_LIST);
         appCache.invalidate(appCache.generateKey({ prefix: CACHE_PREFIX.CATEGORIES }));
-        fetchProjects();
+        fetchProjects(true);
       } else {
         setError(data.message || '删除失败');
       }
